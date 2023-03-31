@@ -214,10 +214,12 @@ export default class CRenderer extends Component
 
     protected onPulse(event: IPulseEvent)
     {
-        if (event.systemUpdated || this._forceRender) {
+        if (event.systemUpdated || this._forceRender || this.activeScene?.userData.mixer) {
             if (ENV_DEVELOPMENT) {
                 console.log("CRenderer.onPulse - render views...");
             }
+            
+            this.activeScene?.userData.mixer?.update(event.context.secondsDelta);
 
             this.views.forEach(view => {
                 if(!view.renderer.xr.isPresenting) {

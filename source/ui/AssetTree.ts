@@ -9,20 +9,24 @@ import System from "@ff/graph/System";
 
 import Tree, { customElement, property, html } from "@ff/ui/Tree";
 
-import CAssetManager, { IAssetEntry, IAssetTreeChangeEvent } from "../components/CAssetManager";
+import { IAssetEntry, IAssetTreeChangeEvent } from "../components/CAssetManager";
 
 ////////////////////////////////////////////////////////////////////////////////
+
+export interface IAssetDragEvent extends CustomEvent{
+    detail: {
+        node: IAssetEntry;
+        event: DragEvent;
+    };
+}
 
 @customElement("ff-asset-tree")
 export default class AssetTree extends Tree<IAssetEntry>
 {
-    @property({ attribute: false })
-    system: System;
+    @property({ attribute: false, type: Array })
+    selection: Array<IAssetEntry> = [];
 
-    @property({ type: String })
-    path: string = "";
 
-    protected assetManager: CAssetManager = null;
 
     constructor()
     {
@@ -35,24 +39,7 @@ export default class AssetTree extends Tree<IAssetEntry>
         super.firstConnected();
         this.classList.add("ff-asset-tree");
 
-        this.addEventListener("click", this.onContainerClick.bind(this));
-    }
 
-    protected connected()
-    {
-        super.connected();
-
-        this.assetManager = this.system.components.get(CAssetManager);
-        this.assetManager.on<IAssetTreeChangeEvent>("tree-change", this.onTreeChange, this);
-        this.onTreeChange({ type: "tree-change", root: this.assetManager.root });
-    }
-
-    protected disconnected()
-    {
-        this.assetManager.off<IAssetTreeChangeEvent>("tree-change", this.onTreeChange, this);
-        this.assetManager = null;
-
-        super.disconnected();
     }
 
     protected renderNodeHeader(treeNode: IAssetEntry)
@@ -98,30 +85,24 @@ export default class AssetTree extends Tree<IAssetEntry>
 
     protected isNodeSelected(treeNode: IAssetEntry): boolean
     {
-        return this.assetManager.isSelected(treeNode);
+        return this.selection.indexOf(treeNode) !== -1;
     }
 
-    protected onTreeChange(event: IAssetTreeChangeEvent)
+    protected select(treeNode: IAssetEntry, toggle: boolean)
     {
-        // traverse base path to find root tree node
-        const parts = this.path.split("/").filter(part => part !== "");
-        let root = event.root;
-        if(!root) return;
-
-        for (let i = 0; i < parts.length; ++i) {
-            root = root.children.find(child => child.info.name === parts[i]);
-            if (!root) {
-                break;
-            }
+        const selected = this.selection.indexOf(treeNode) !== -1;
+        if(toggle && selected){
+            this.selection = this.selection.filter(node => node !== treeNode);
+        }else if(!toggle){
+            this.selection = [treeNode];
+        }else if(toggle){
+            this.selection = [...this.selection, treeNode];
         }
 
-        this.root = root || event.root;
-        this.requestUpdate();
-    }
-
-    protected onContainerClick()
-    {
-        this.assetManager.select(null, false);
+        this.dispatchEvent(new CustomEvent("select", {
+            bubbles: true,
+            detail: this.selection,
+        }));
     }
 
     protected onNodeClick(event: MouseEvent, treeNode: IAssetEntry)
@@ -132,13 +113,16 @@ export default class AssetTree extends Tree<IAssetEntry>
             this.toggleExpanded(treeNode);
         }
         else {
-            this.assetManager.select(treeNode, event.ctrlKey);
+            this.select(treeNode, event.ctrlKey);
         }
     }
 
     protected onNodeDblClick(event: MouseEvent, treeNode: IAssetEntry)
     {
-        this.assetManager.open(treeNode);
+        this.dispatchEvent(new CustomEvent("open", {
+            bubbles: true,
+            detail: treeNode,
+        }));
     }
 
     protected canDrop(event: DragEvent, targetTreeNode: IAssetEntry): boolean
@@ -151,31 +135,21 @@ export default class AssetTree extends Tree<IAssetEntry>
 
     protected onNodeDragStart(event: DragEvent, sourceTreeNode: IAssetEntry)
     {
-        this.assetManager.select(sourceTreeNode, event.ctrlKey);
+        this.select(sourceTreeNode, event.ctrlKey);
         event.dataTransfer.setData("text/plain", sourceTreeNode.info.path);
-
-        const mimeType = sourceTreeNode.info.type;
-        if (mimeType === "image/jpeg" || mimeType === "image/png") {
-            const url = this.assetManager.getAssetURL(sourceTreeNode.info.path);
-            event.dataTransfer.setData("text/html", `<img src="${url}">`);
-        }
-
+        this.dispatchEvent(new CustomEvent("dragstart", {
+            bubbles: true, 
+            detail: {node:sourceTreeNode, event}
+        }));
         return super.onNodeDragStart(event, sourceTreeNode);
     }
 
     protected onNodeDrop(event: DragEvent, targetTreeNode: IAssetEntry)
     {
-        super.onNodeDrop(event, targetTreeNode);
-        const files = event.dataTransfer.files;
-
-        if (files.length > 0) {
-            //console.log("dropping files", files.item(0));
-            this.assetManager.uploadFiles(files, targetTreeNode);
-        }
-        else {
-            //const sourceTreeNode = this.getNodeFromDragEvent(event);
-            //console.log("dropping asset", sourceTreeNode.info.path);
-            this.assetManager.moveSelected(targetTreeNode);
-        }
+        this.dispatchEvent(new CustomEvent("dragstart", {
+            bubbles: true, 
+            detail: {node:targetTreeNode, event}
+        }));
+        return super.onNodeDrop(event, targetTreeNode);
     }
 }

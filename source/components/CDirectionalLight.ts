@@ -5,7 +5,7 @@
  * License: MIT
  */
 
-import { Object3D, DirectionalLight } from "three";
+import { Object3D, DirectionalLight, Vector3, Spherical } from "three";
 
 import { Node, types } from "@ff/graph/Component";
 
@@ -18,8 +18,8 @@ export default class CDirectionalLight extends CLight
     static readonly typeName: string = "CDirectionalLight";
 
     protected static readonly dirLightIns = {
-        position: types.Vector3("Light.Position"),
-        target: types.Vector3("Light.Target", [ 0, -1, 0 ]),
+        elevation: types.Number("Source.Elevation", {preset:90, min:0, max:90, bar: true}),
+        azimuth: types.Number("Source.Azimuth", {preset:0, min:0, max:360, bar: true}),
         shadowSize: types.Number("Shadow.Size", 100),
     };
 
@@ -48,9 +48,8 @@ export default class CDirectionalLight extends CLight
             light.intensity = ins.intensity.value * Math.PI;  //TODO: Remove PI factor when we can support physically correct lighting units
         }
 
-        if (ins.position.changed || ins.target.changed) {
-            light.position.fromArray(ins.position.value);
-            light.target.position.fromArray(ins.target.value);
+        if(ins.elevation.changed || ins.azimuth.changed){
+            light.position.setFromSpherical(new Spherical(light.position.length(), (90-ins.elevation.value)*2*Math.PI/360,(90-ins.azimuth.value)*2*Math.PI/360));
             light.updateMatrix();
             light.target.updateMatrix();
         }
